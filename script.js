@@ -3,6 +3,36 @@
 // ============================================================================
 const MAX_HISTORY_ITEMS = 10;  // 歷史記錄最大保存筆數
 const MAX_WORKDAYS = 365;      // 自訂工作日天數上限
+const DEBUG = false;           // 除錯模式（生產環境設為 false）
+
+// ============================================================================
+// 安全函數
+// ============================================================================
+
+/**
+ * HTML 實體編碼，防止 XSS 攻擊
+ * @param {any} unsafe 待編碼的字串
+ * @returns {string} 編碼後的安全字串
+ */
+function escapeHtml(unsafe) {
+    if (typeof unsafe !== 'string') return '';
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+/**
+ * 條件式除錯輸出
+ * @param  {...any} args 要輸出的訊息
+ */
+function debugLog(...args) {
+    if (DEBUG) {
+        console.log(...args);
+    }
+}
 
 // ============================================================================
 // 全域變數
@@ -83,10 +113,10 @@ function processHolidays() {
             const lastDay = lastDateStr.substring(6, 8);
             maxDate = new Date(`${lastYear}/${lastMonth}/${lastDay}`);
             
-            console.log(`假日資料範圍: ${formatDate(minDate)} 到 ${formatDate(maxDate)}`);
+            debugLog(`假日資料範圍: ${formatDate(minDate)} 到 ${formatDate(maxDate)}`);
         }
         
-        console.log("假日資料已載入 (Set):", holidaySet);
+        debugLog("假日資料已載入 (Set):", holidaySet);
         document.getElementById('status').innerHTML = `<i class="fas fa-check-circle"></i> 已載入 ${holidaySet.size} 個假日`;
         document.getElementById('statusDot').classList.add('success');
         holidaysLoaded = true;
@@ -187,14 +217,14 @@ function calculateDate() {
                 <div class="space-y-4">
                     <div class="flex items-center justify-between p-4 bg-white bg-opacity-60 rounded-2xl">
                         <span class="text-sm font-medium text-nature-moss">起始日期</span>
-                        <span class="text-lg font-bold text-nature-green">${formatDateForDisplay(startDate)}</span>
+                        <span class="text-lg font-bold text-nature-green">${escapeHtml(formatDateForDisplay(startDate))}</span>
                     </div>
                     <div class="flex items-center justify-center">
                         <i class="fas fa-arrow-down text-2xl text-nature-moss opacity-50"></i>
                     </div>
                     <div class="flex items-center justify-between p-4 bg-nature-green bg-opacity-10 rounded-2xl border-2 border-nature-green border-opacity-20">
-                        <span class="text-sm font-medium text-nature-green">第 ${days} 個工作日</span>
-                        <span class="text-2xl font-light text-nature-green handwritten-number">${resultDateStr}</span>
+                        <span class="text-sm font-medium text-nature-green">第 ${escapeHtml(String(days))} 個工作日</span>
+                        <span class="text-2xl font-light text-nature-green handwritten-number">${escapeHtml(resultDateStr)}</span>
                     </div>
                 </div>
             </div>
@@ -233,9 +263,9 @@ function getWorkDay(startDate, days) {
         // 檢查是否為假日 (使用 Set.has() 提升效能)
         if (!holidaySet.has(dateString)) {
             workDays++;
-            console.log(`工作日 ${workDays}: ${dateString}`);
+            debugLog(`工作日 ${workDays}: ${dateString}`);
         } else {
-            console.log(`假日: ${dateString}`);
+            debugLog(`假日: ${dateString}`);
         }
         
         if (workDays < days) {
@@ -302,6 +332,36 @@ function saveToHistory(startDate, resultDate, days) {
 }
 
 /**
+ * 驗證單一歷史記錄項目的型別與格式
+ * @param {any} item 待驗證的項目
+ * @returns {boolean} 是否為有效項目
+ */
+function isValidHistoryItem(item) {
+    if (!item || typeof item !== 'object') return false;
+
+    // 檢查必要欄位的型別
+    if (typeof item.id !== 'number' || !Number.isFinite(item.id) || item.id <= 0) return false;
+    if (typeof item.startDate !== 'string' || item.startDate.length === 0) return false;
+    if (typeof item.resultDate !== 'string' || item.resultDate.length === 0) return false;
+    if (typeof item.timestamp !== 'string' || item.timestamp.length === 0) return false;
+
+    // 檢查 days 欄位（可選，向下相容舊記錄）
+    if (item.days !== undefined) {
+        if (typeof item.days !== 'number' || !Number.isFinite(item.days) || item.days < 1) {
+            return false;
+        }
+    }
+
+    // 檢查日期格式（民國年格式：1-3位數/1-2位數/1-2位數）
+    const datePattern = /^\d{1,3}\/\d{1,2}\/\d{1,2}$/;
+    if (!datePattern.test(item.startDate) || !datePattern.test(item.resultDate)) {
+        return false;
+    }
+
+    return true;
+}
+
+/**
  * 從 localStorage 載入歷史記錄
  */
 function loadHistory() {
@@ -316,14 +376,19 @@ function loadHistory() {
             throw new Error("歷史記錄格式錯誤");
         }
 
-        // 過濾無效的記錄項目
-        calculationHistory = parsed.filter(item =>
-            item.id && item.startDate && item.resultDate && item.timestamp
-        );
+        // 使用強化的驗證函數過濾無效項目
+        const validItems = parsed.filter(isValidHistoryItem);
 
+        // 如果過濾掉了項目，更新 localStorage 以移除無效資料
+        if (validItems.length !== parsed.length) {
+            debugLog(`過濾掉 ${parsed.length - validItems.length} 筆無效歷史記錄`);
+            localStorage.setItem('workdayCalculatorHistory', JSON.stringify(validItems));
+        }
+
+        calculationHistory = validItems;
         renderHistory();
     } catch (error) {
-        console.error("載入歷史記錄失敗:", error);
+        debugLog("載入歷史記錄失敗:", error);
         localStorage.removeItem('workdayCalculatorHistory');
         calculationHistory = [];
     }
@@ -362,25 +427,33 @@ function renderHistory() {
     calculationHistory.forEach(item => {
         // 向下相容：舊記錄沒有 days 欄位時預設為 9
         const days = item.days || 9;
+        // 安全處理：對所有來自 localStorage 的資料進行 HTML 編碼
+        const safeTimestamp = escapeHtml(item.timestamp);
+        const safeStartDate = escapeHtml(item.startDate);
+        const safeResultDate = escapeHtml(item.resultDate);
+        const safeDays = escapeHtml(String(days));
+        // item.id 為數字且來自 Date.now()，但仍需驗證
+        const safeId = Number.isFinite(item.id) ? item.id : 0;
+
         historyHTML += `
-            <div class="bg-nature-light rounded-2xl p-4 hover:bg-nature-cream transition-colors duration-200" data-id="${item.id}">
+            <div class="bg-nature-light rounded-2xl p-4 hover:bg-nature-cream transition-colors duration-200" data-id="${safeId}">
                 <div class="space-y-2">
                     <div class="flex items-center justify-between">
                         <span class="text-xs text-nature-moss flex items-center">
                             <i class="fas fa-clock mr-1"></i>
-                            ${item.timestamp}
+                            ${safeTimestamp}
                         </span>
                         <div class="flex space-x-1">
                             <button
                                 class="p-2 text-nature-green hover:text-white hover:bg-nature-green rounded-lg transition-colors duration-200"
-                                onclick="useHistoryItem(${item.id})"
+                                onclick="useHistoryItem(${safeId})"
                                 title="使用此日期"
                             >
                                 <i class="fas fa-redo-alt text-sm"></i>
                             </button>
                             <button
                                 class="p-2 text-nature-coral hover:text-white hover:bg-nature-coral rounded-lg transition-colors duration-200"
-                                onclick="removeHistoryItem(${item.id})"
+                                onclick="removeHistoryItem(${safeId})"
                                 title="刪除此記錄"
                             >
                                 <i class="fas fa-times text-sm"></i>
@@ -390,11 +463,11 @@ function renderHistory() {
                     <div class="text-sm">
                         <div class="flex items-center justify-between mb-1">
                             <span class="text-nature-moss">起始日期</span>
-                            <span class="font-semibold text-nature-green">${item.startDate}</span>
+                            <span class="font-semibold text-nature-green">${safeStartDate}</span>
                         </div>
                         <div class="flex items-center justify-between">
-                            <span class="text-nature-moss">第 ${days} 個工作日</span>
-                            <span class="font-semibold text-nature-green">${item.resultDate}</span>
+                            <span class="text-nature-moss">第 ${safeDays} 個工作日</span>
+                            <span class="font-semibold text-nature-green">${safeResultDate}</span>
                         </div>
                     </div>
                 </div>

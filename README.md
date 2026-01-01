@@ -1,4 +1,4 @@
-# Workday Calculator
+# Workday 第 N 個工作日，排除台灣假日
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Live Demo](https://img.shields.io/badge/Demo-Live-blue.svg)](https://tznthou.github.io/day-12-workday/)
@@ -7,7 +7,7 @@
 
 > 計算從指定日期起的第 N 個工作日，自動排除台灣國定假日與週末
 
-[← 回到 Muripo HQ](https://tznthou.github.io/muripo-hq/)
+[← 回到 Muripo HQ](https://tznthou.github.io/muripo-hq/) | [English](README_EN.md)
 
 ---
 
@@ -217,3 +217,9 @@ UI 的靈感來自「不那麼數位」的設計趨勢：有機形狀、柔和�
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 本專案採用 [MIT License](LICENSE) 授權。
+
+---
+
+## 作者
+
+子超 - [tznthou@gmail.com](mailto:tznthou@gmail.com)
